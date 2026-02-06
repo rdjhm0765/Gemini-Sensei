@@ -42,6 +42,7 @@ export interface SenseiAnalysis {
   shortcutMethod?: string;
   cognitiveInsights?: string[];
   videoRecommendation?: VideoRecommendation;
+  youtubeUrl?: string; // Direct link for recommendations
   modeSummaryFooter: string;
   groundingSources?: GroundingSource[];
   errorBoundingBox?: BoundingBox;
