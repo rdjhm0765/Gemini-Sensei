@@ -1,0 +1,8 @@
+{
+  "name": "Gemini Sensei",
+  "description": "An AI-powered cognitive tutor that analyzes step-by-step reasoning to fix how you think, not just what you answer. Upload work or type your logic to receive deep cognitive diagnostics.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
