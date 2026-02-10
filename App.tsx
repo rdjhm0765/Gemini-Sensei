@@ -4,7 +4,7 @@ import { Layout } from './components/Layout';
 import { AnalysisDisplay } from './components/AnalysisDisplay';
 import { ProfileView } from './components/ProfileView';
 import { LiveSensei } from './components/LiveSensei';
-import { analyzeReasoning, SENSEI_SAMPLES } from './geminiService';
+import { analyzeReasoning, SENSEI_SAMPLES, getHistory } from './geminiService';
 import { SenseiAnalysis, ReasoningMode } from './types';
 
 declare global {
@@ -31,30 +31,11 @@ const App: React.FC = () => {
   const [attachedFile, setAttachedFile] = useState<AttachedFile | null>(null);
   const [mode, setMode] = useState<ReasoningMode>('EXAM');
   const [quotaError, setQuotaError] = useState(false);
-  const [hasKey, setHasKey] = useState<boolean | null>(null); // null = checking, false = needs connection
+  const [isReady, setIsReady] = useState(false);
   const [isDemoMode, setIsDemoMode] = useState(false);
   const [showSampleLibrary, setShowSampleLibrary] = useState(false);
   const [activeCategory, setActiveCategory] = useState('Mathematics');
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Initial silent check for existing key
-  useEffect(() => {
-    const initCheck = async () => {
-      try {
-        if (window.aistudio) {
-          const selected = await window.aistudio.hasSelectedApiKey();
-          setHasKey(selected);
-        } else {
-          // If not in AI Studio environment, fallback to allowing interaction
-          setHasKey(true);
-        }
-      } catch (e) {
-        console.error("Initialization check failed", e);
-        setHasKey(false);
-      }
-    };
-    initCheck();
-  }, []);
 
   const handleRunDiagnosis = async () => {
     if (isDemoMode) {
@@ -63,13 +44,6 @@ const App: React.FC = () => {
     }
     if (!textInput.trim() && !attachedFile) return;
     
-    // Final check before API call
-    const isKeySelected = await window.aistudio?.hasSelectedApiKey();
-    if (!isKeySelected && !isDemoMode) { 
-      await window.aistudio?.openSelectKey(); 
-      setHasKey(true); 
-    }
-
     setLoading(true);
     setQuotaError(false);
     try {
@@ -80,33 +54,23 @@ const App: React.FC = () => {
       );
       setAnalysis(result);
     } catch (error: any) {
-      if (error.message?.includes('Requested entity was not found')) {
-        setHasKey(false); 
-        await window.aistudio?.openSelectKey(); 
-        setHasKey(true);
-      } else if (error.message === "QUOTA_EXCEEDED" || error.message === "KEY_NOT_FOUND") {
+      if (error.message === "QUOTA_EXCEEDED") {
         setQuotaError(true);
       } else { 
-        alert("Sensei encountered an error. Please check your connection or try again."); 
+        alert("Sensei encountered a connection error. Please try again or use Demo Mode."); 
       }
     } finally { setLoading(false); }
   };
 
   const startDemo = () => {
     setIsDemoMode(true);
-    setHasKey(true); 
+    setIsReady(true); 
     setShowSampleLibrary(true);
   };
 
   const exitDemo = () => {
     setIsDemoMode(false);
     handleReset();
-    // Re-verify key status when exiting demo
-    const check = async () => {
-      const selected = await window.aistudio?.hasSelectedApiKey();
-      setHasKey(selected);
-    };
-    check();
   };
 
   const handleReset = () => { 
@@ -118,6 +82,11 @@ const App: React.FC = () => {
       setAttachedFile(null); 
     }
     setQuotaError(false);
+  };
+
+  const handleSelectHistorical = (item: SenseiAnalysis) => {
+    setAnalysis(item);
+    setView('ANALYZE');
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -161,15 +130,6 @@ const App: React.FC = () => {
   };
 
   const categoryIcons: any = { Mathematics: 'Σ', Physics: '⚛', Programming: '⌽' };
-
-  // Loading state for initial check
-  if (hasKey === null) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-      </div>
-    );
-  }
 
   return (
     <Layout>
@@ -250,7 +210,7 @@ const App: React.FC = () => {
       )}
 
       {/* FRIENDLY ONBOARDING MODAL */}
-      {!hasKey && !isDemoMode && (
+      {!isReady && (
         <div className="fixed inset-0 bg-slate-900/98 z-[200] flex items-center justify-center p-6 backdrop-blur-lg animate-in fade-in duration-700">
           <div className="max-w-2xl w-full bg-white rounded-[4rem] p-16 text-center shadow-[0_35px_100px_-15px_rgba(0,0,0,0.5)] border border-slate-100">
             <div className="w-24 h-24 bg-indigo-600 rounded-[2rem] flex items-center justify-center mx-auto mb-10 shadow-[0_20px_40px_-10px_rgba(79,70,229,0.5)] transform -rotate-3">
@@ -258,31 +218,28 @@ const App: React.FC = () => {
             </div>
             <h2 className="text-4xl font-black text-slate-900 mb-6 serif-font tracking-tight">Initialize Sensei</h2>
             <p className="text-slate-500 mb-12 text-lg leading-relaxed max-w-lg mx-auto">
-              Welcome back. To begin deep cognitive analysis, simply connect your <span className="font-bold text-slate-900 italic underline decoration-indigo-300">AI Studio credits</span> to the engine.
+              Ready to begin deep cognitive analysis. Sensei is connected and ready to observe your work.
             </p>
             
             <div className="grid sm:grid-cols-2 gap-4">
               <button 
-                onClick={async () => { await window.aistudio?.openSelectKey(); setHasKey(true); }} 
+                onClick={() => setIsReady(true)} 
                 className="group relative flex flex-col items-center justify-center p-8 bg-indigo-600 rounded-[2.5rem] hover:bg-indigo-700 transition-all shadow-xl hover:-translate-y-1"
               >
-                <span className="text-white font-black uppercase tracking-widest text-sm mb-1">Live Connection</span>
-                <span className="text-indigo-200 text-[10px] font-black uppercase opacity-70">Use Free or Paid Tier</span>
+                <span className="text-white font-black uppercase tracking-widest text-sm mb-1">Enter Engine</span>
+                <span className="text-indigo-200 text-[10px] font-black uppercase opacity-70">Use Live Sensei</span>
               </button>
               <button 
                 onClick={startDemo} 
                 className="group relative flex flex-col items-center justify-center p-8 bg-slate-900 rounded-[2.5rem] hover:bg-black transition-all shadow-xl hover:-translate-y-1"
               >
                 <span className="text-white font-black uppercase tracking-widest text-sm mb-1">Explore Samples</span>
-                <span className="text-slate-400 text-[10px] font-black uppercase opacity-70">No Key Required</span>
+                <span className="text-slate-400 text-[10px] font-black uppercase opacity-70">Guided Onboarding</span>
               </button>
             </div>
 
             <div className="mt-12 pt-10 border-t border-slate-100">
-              <p className="text-[10px] font-black uppercase text-slate-300 tracking-[0.3em] mb-4">First time using Gemini API?</p>
-              <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noopener noreferrer" className="text-[10px] font-black uppercase text-indigo-500 hover:text-indigo-700 tracking-[0.2em] transition-colors">
-                Setup Workspace ↗
-              </a>
+              <p className="text-[10px] font-black uppercase text-slate-300 tracking-[0.3em]">Cognitive Intelligence Platform v3.1</p>
             </div>
           </div>
         </div>
@@ -303,14 +260,14 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      {view === 'PROFILE' && <ProfileView />}
+      {view === 'PROFILE' && <ProfileView onSelectHistory={handleSelectHistorical} />}
       {view === 'LIVE' && <LiveSensei onClose={() => setView('ANALYZE')} isDemo={isDemoMode} />}
       {view === 'ANALYZE' && (
         !analysis ? (
           <div className="max-w-4xl mx-auto space-y-10 animate-in fade-in slide-in-from-top-4 duration-700">
             <div className="text-center mb-16">
               <div className="inline-block px-4 py-1.5 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-600 text-[10px] font-black uppercase tracking-[0.2em] mb-6">
-                Cognitive Reasoning Engine v3.0
+                Cognitive Reasoning Engine v3.1
               </div>
               <h2 className="text-6xl font-black text-slate-900 mb-6 serif-font tracking-tight leading-tight">Identify your logic loops.</h2>
               <p className="text-xl text-slate-500 max-w-2xl mx-auto leading-relaxed">Gemini Sensei doesn't just grade your answers—it fixes the way your mind processes information.</p>
